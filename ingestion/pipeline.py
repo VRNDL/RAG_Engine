@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List, Dict, Any
-from pypdf import PdfReader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from docling.document_converter import DocumentConverter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from sentence_transformers import SentenceTransformer
 import chromadb
 
@@ -9,48 +9,46 @@ import chromadb
 #---Loader---
 
 def load_document(file_path: str) -> str:
+    """Converts PDF into markdown via library"""
     path=Path(file_path)
-
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
-    ext=path.suffix.lower()   # get extension
+    
+    print(f" -> Converting {path.name} to Markdown using Docling...")
+    converter=DocumentConverter()
+    result=converter.convert(file_path)     # actual conversion
+    return result.document.export_to_markdown()
 
-    if ext==".pdf":
-        reader=PdfReader(str(path))     #open pdf
-        # extract text page by page
-        pages_text=[page.extract_text() or "" for page in reader.pages]
-        return "\n".join(pages_text)                # form one big string of content
-
-    elif ext in [".txt",".md"]:
-        with open(path,"r",encoding="utf-8") as f:
-            return f.read()
-
-    else:
-        raise ValueError(f"Unsupported format. Expected: .pdf, .md, .txt")
 
 
 #--Chunking--
 
-def chunk_text(raw_text: str, source: str, chunk_size: int, chunk_overlap: int) -> List[Dict[str, Any]]:
-    splitter=RecursiveCharacterTextSplitter(  #init
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n\n","\n"," ",""]  # what to split on (priority order)
-    )
+def chunk_text(raw_markdown: str, source: str) -> List[Dict[str, Any]]:
+    """Splits mardown logically based on headers"""
+    headers_to_split_on=[     # what to split on
+        ("#","Header 1"),
+        ("##","Header 2"),
+        ("###","Header 3"),
+    ]
 
-    splits=splitter.split_text(raw_text)   # list of strings after splitting
+    # actual splitting
+    markdown_splitter=MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)  # rule
+    md_splits=markdown_splitter.split_text(raw_markdown)                                   # splitting text on headers as list of documents
+
+
+    # if a single section is still massive (yk what else is massive? THE LOWWW TA-)
+    char_splitter=RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+    final_splits=char_splitter.split_documents(md_splits)                       # metadata is copied onto the split files as list of documents
     chunks=[]
 
-    for idx, text in enumerate(splits):
-        # put each chunk in a dict
+    for idx, doc in enumerate(final_splits):
+        meta=doc.metadata.copy()     # doc.metadata now contains section headers
+        meta["source"]=str(source)   # attaching new column called source that has the file path
+        meta["chunk_index"]=idx
         chunks.append({                              # putting dicts in a list
-            "id" : f"{Path(source).stem}_{idx}",     # file name and index as key
-            "text" : text,
-            "metadata" : {
-                "source": str(source),
-                "chunk_index":idx,
-                "char_length":len(text)
-            }
+            "id" : f"{Path(source).stem}_md_{idx}",     # file name and index as key
+            "text" : doc.page_content,
+            "metadata" : meta
         })
     return chunks
 

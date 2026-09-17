@@ -9,7 +9,7 @@ from retrieval.search import retrieve_context
 from generation.llm import generate_answer
 
 PERSIST_DIR = "./chroma_db"
-COLLECTION_NAME = "rag_engine_baseline"
+COLLECTION_NAME = "rag_engine_pipeline"
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 LLM_MODEL = "openai/gpt-oss-120b"
 
@@ -32,6 +32,8 @@ def main():
     
     print("[2/3] Searching database...")
     context = retrieve_context(user_query, embed_model, collection)
+
+    #print(f"\n--- RAW RETRIEVED CHUNKS ---\n{context}\n----------------------------\n")
     
     print("[3/3] Generating answer...")
     answer = generate_answer(user_query, context, llm_client, LLM_MODEL)

@@ -1,7 +1,7 @@
 import os
 import sys
 import chromadb
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -12,6 +12,7 @@ PERSIST_DIR = "./chroma_db"
 COLLECTION_NAME = "rag_engine_pipeline"
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 LLM_MODEL = "openai/gpt-oss-120b"
+RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 def main():
     if len(sys.argv) < 2:
@@ -25,13 +26,14 @@ def main():
     db_client = chromadb.PersistentClient(path=PERSIST_DIR)
     collection = db_client.get_collection(name=COLLECTION_NAME)
     embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    reranker_model=CrossEncoder(RERANKER_MODEL_NAME)
     llm_client = OpenAI(
         base_url="https://api.groq.com/openai/v1",
         api_key=os.environ.get("GROQ_API_KEY"),
     )
     
     print("[2/3] Searching database...")
-    context = retrieve_context(user_query, embed_model, collection)
+    context = retrieve_context(user_query, embed_model, collection, reranker_model)
 
     #print(f"\n--- RAW RETRIEVED CHUNKS ---\n{context}\n----------------------------\n")
     

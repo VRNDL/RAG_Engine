@@ -1,8 +1,9 @@
 from openai import OpenAI
+from typing import List, Dict
 
 #---Generation---
 
-def generate_answer(query: str, context: str, client: OpenAI, LLM_MODEL: str) -> str:
+def generate_answer(query: str, context: str, chat_history: List[Dict[str, str]], client: OpenAI, LLM_MODEL: str) -> str:
     # System prompt: tells LLM how to behave
     system_prompt = """
     You are an expert technical assistant.
@@ -14,16 +15,21 @@ def generate_answer(query: str, context: str, client: OpenAI, LLM_MODEL: str) ->
     {context}
     """
 
+    # messages extracted so that we can sandwich it between system prompt and new formatted prompt
+
+    messages=[{"role":"system", "content":system_prompt}]
+
+    for msg in chat_history:
+        messages.append(msg)
+
     # format the prompt putting retireved chunks in {context}
-    formatted_system_prompt=system_prompt.format(context=context)
+    final_prompt=f"Context:\n{context}\n\nQuestion: {query}"
+    messages.append({"role":"user", "content": final_prompt})
 
     # call LLM
     response=client.chat.completions.create(
         model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": formatted_system_prompt},
-            {"role": "user", "content": query}
-        ],
+        messages=messages,
         temperature=0.0    # creativity level
     )
 

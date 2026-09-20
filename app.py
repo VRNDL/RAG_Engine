@@ -7,10 +7,7 @@ import chromadb
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from openai import OpenAI
 from dotenv import load_dotenv
-
-from retrieval.search import retrieve_context
-from retrieval.memory import formulate_query
-from generation.llm import generate_answer
+from workflow import agentic_rag
 
 # global variables, else lifespan will treat it as local variables
 db_client=None
@@ -51,26 +48,19 @@ class ChatResponse(BaseModel):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest):
-    try:
-        # reformulate
-        standalone_query=formulate_query(request.query, request.chat_history, llm_client, LLM_MODEL)
+    final_state=agentic_rag.invoke({
+        "query": request.query,
+        "chat_history":request.chat_history
+    })
+    answer=final_state["answer"]
 
-        # retrieve
-        context=retrieve_context(standalone_query, embed_model, collection, reranker_model)
+    # append to history
+    updated_history=request.chat_history.copy()
+    updated_history.append({"role":"user", "content":request.query})
+    updated_history.append({"role":"assistant", "content":answer})
 
-        # generate
-        answer=generate_answer(request.query, context, request.chat_history, llm_client, LLM_MODEL)
+    if(len(updated_history)>6):
+        updated_history=updated_history[-6:]
 
-        # append to history
-        updated_history=request.chat_history.copy()
-        updated_history.append({"role":"user", "content":request.query})
-        updated_history.append({"role":"assistant", "content":answer})
-
-        if(len(updated_history)>6):
-            updated_history=updated_history[-6:]
-
-        # return answer and history to client
-        return ChatResponse(answer=answer, chat_history=updated_history)
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # return answer and history to client
+    return ChatResponse(answer=answer, chat_history=updated_history)

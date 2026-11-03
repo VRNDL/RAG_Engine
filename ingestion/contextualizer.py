@@ -26,7 +26,7 @@ def contextualize_chunks(chunks: List[Dict[str, Any]], full_document_text:str, c
 
         response=client.chat.completions.create(
             model=model_name,
-            messages=[{"role":"user","content":"prompt"}],
+            messages=[{"role":"user","content":prompt}],
             temperature=0.0
         )
 

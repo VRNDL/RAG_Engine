@@ -44,6 +44,26 @@ services:
     ports:
       - "9200:9200"
 
+  # 5. Prometheus: Scrapes FastAPI metrics
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  # 6. Grafana: Visualizes the metrics
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      
 volumes:
   pgdata:
   pgdata_v2:

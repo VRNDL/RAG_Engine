@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'fastapi_rag'
+    static_configs:
+      # host.docker.internal allows the Docker container to see your Windows host's port 8000
+      - targets: ['host.docker.internal:8000']

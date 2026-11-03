@@ -1,0 +1,7 @@
+POST http://127.0.0.1:8000/chat
+Content-Type: application/json
+
+{
+    "query": "What is the battery life of the AeroX-500?",
+    "chat_history": []
+}

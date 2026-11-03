@@ -1,28 +1,50 @@
-from sentence_transformers import SentenceTransformer, CrossEncoder
 import heapq
+from weaviate_client import get_weaviate_client
+from sentence_transformers import CrossEncoder
 
-def retrieve_context(query: str, model: SentenceTransformer, collection, reranker: CrossEncoder, num_results: int=15, top: int=3)-> str:
-    """Embed user's query and find chunk most relevant to it"""
-    query_embedding=model.encode([query], normalize_embeddings=True).tolist()   # turn query into vector
-
-    #search the db
-    results=collection.query(
-        query_embeddings=query_embedding,
-        n_results=num_results
+def retrieve_context(query: str, embed_model, collection_ignored, reranker_model: CrossEncoder, top_k=20, final_k=5) -> str:
+    """
+    Executes an Alpha-weighted Hybrid Search against Weaviate (Dense + Sparse), 
+    followed by Cross-Encoder reranking using a heap for efficient top-k extraction.
+    """
+    client = get_weaviate_client()
+    weaviate_collection = client.collections.get("RAG_Chunks")
+    
+    # 1. Embed the standalone query for the dense vector portion
+    query_vector = embed_model.encode(query).tolist()
+    
+    # 2. Execute Hybrid Search
+    # alpha=0.5 means 50% vector semantic match, 50% exact keyword match (BM25)
+    response = weaviate_collection.query.hybrid(
+        query=query,
+        vector=query_vector,
+        alpha=0.5,
+        limit=top_k,
+        return_properties=["text", "document_context", "source"]
     )
+    
+    retrieved_docs = []
+    for obj in response.objects:
+        props = obj.properties
+        # Reconstruct the contextualized chunk for the reranker to evaluate
+        doc_text = f"[{props.get('document_context', '')}]\n{props.get('text', '')}"
+        retrieved_docs.append(doc_text)
+        
+    client.close()
 
-    # extract text chunks (since we are passing only 1 query, we will get the 3 nearest chunks for that query at index 0)
-    retrieved_chunks=results["documents"][0]
-
-    # model needs pair [query, chunk_i]
-    pairs=[[query, chunk] for chunk in retrieved_chunks]
-
-    # generate relevance score for each pair
-    score=reranker.predict(pairs)
-
-    #sort them via heap
-    top_scored_pairs=heapq.nlargest(top, zip(score, retrieved_chunks), key=lambda x:x[0])  
-
-    # join the chunks separated by ---
-    context_string="\n\n---\n\n".join([chunk for _, chunk in top_scored_pairs])
-    return context_string
+    # 3. Cross-Encoder Reranking
+    if not retrieved_docs:
+        return "No relevant context found in the database."
+        
+    # Pair the query with each retrieved document for the Cross-Encoder
+    pairs = [[query, doc] for doc in retrieved_docs]
+    scores = reranker_model.predict(pairs)
+    
+    # Use a heap to efficiently extract the top final_k elements in O(N log K) time
+    scored_docs = zip(scores, retrieved_docs)
+    top_scored_docs = heapq.nlargest(final_k, scored_docs, key=lambda x: x[0])
+    
+    # Extract just the document text from the heap results
+    best_docs = [doc for score, doc in top_scored_docs]
+    
+    return "\n\n---\n\n".join(best_docs)

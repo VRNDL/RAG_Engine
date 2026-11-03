@@ -30,9 +30,9 @@ services:
       POSTGRES_PASSWORD: rag_password
       POSTGRES_DB: rag_evals
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_v2:/var/lib/postgresql/data
 
   # 4. OpenSearch: (Optional for this exact step, but required for your resume's strict lexical search features).
   opensearch:
@@ -46,3 +46,4 @@ services:
 
 volumes:
   pgdata:
+  pgdata_v2:

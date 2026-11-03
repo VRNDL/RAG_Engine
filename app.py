@@ -46,6 +46,7 @@ class ChatResponse(BaseModel):
     answer: str
     chat_history: List[Dict[str, str]]
     session_id: str
+    stratergy_used: str
     error: Optional[str] = None
 
 @app.post("/chat", response_model=ChatResponse)
@@ -83,5 +84,19 @@ async def chat_endpoint(request: ChatRequest):
         answer=answer if not error else "Error generating response.",
         chat_history=updated_history,
         session_id=thread_id,
+        strategy_used=final_state.get("strategy", "unknown"),
         error=error
     )
+
+class FeedbackRequest(BaseModel):
+    strategy_used: str
+    is_positive: bool
+
+@app.post("/feedback")
+def feedback_endpoint(request: FeedbackRequest):
+    from router_logic import log_feedback
+    try:
+        log_feedback(request.strategy_used, request.is_positive)
+        return {"status": "success", "message": "Feedback integrated into Thompson Sampling"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}

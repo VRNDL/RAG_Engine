@@ -7,6 +7,7 @@ from psycopg_pool import ConnectionPool
 from retrieval.memory import formulate_query
 from retrieval.search import retrieve_context
 from generation.llm import generate_answer
+from router_logic import get_best_route
 
 # 1. Define state (added 'error' for deterministic control)
 class RAGState(TypedDict):
@@ -16,13 +17,24 @@ class RAGState(TypedDict):
     context: str
     answer: str
     error: str 
+    stratergy: str
 
 # 2. Define nodes with Supervisor Error Catching
 def query_agent(state: RAGState) -> dict:
     import app
     try:
-        new_query = formulate_query(state["query"], state["chat_history"], app.llm_client, app.LLM_MODEL)
-        return {"standalone_query": new_query, "error": None}
+        # Thompson Sampling dynamically chooses the route
+        chosen_strategy = get_best_route()
+        print(f"-> [Agent: Router] Thompson Sampling selected: {chosen_strategy}")
+        
+        if chosen_strategy == "fast_route":
+            # Bypass the LLM, use raw query
+            new_query = state["query"]
+        else:
+            # Use LLM to contextualize the query
+            new_query = formulate_query(state["query"], state["chat_history"], app.llm_client, app.LLM_MODEL)
+            
+        return {"standalone_query": new_query, "strategy": chosen_strategy, "error": None}
     except Exception as e:
         return {"error": f"Query Agent Failed: {str(e)}"}
 

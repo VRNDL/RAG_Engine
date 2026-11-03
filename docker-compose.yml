@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 1. Weaviate: Replaces ChromaDB. Natively supports BM25 + Vector (Hybrid) search.
+  weaviate:
+    image: cr.weaviate.io/semitechnologies/weaviate:1.27.0
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none' # We will compute vectors in Python and pass them in
+      ENABLE_MODULES: ''
+      CLUSTER_HOSTNAME: 'node1'
+
+  # 2. Redis: Replaces in-memory Python lists for LangGraph state and chat history.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+
+  # 3. PostgreSQL: Relational DB to store RAGAS evaluation scores and Thompson Sampling feedback.
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: rag_password
+      POSTGRES_DB: rag_evals
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # 4. OpenSearch: (Optional for this exact step, but required for your resume's strict lexical search features).
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+
+volumes:
+  pgdata:

@@ -7,8 +7,6 @@ from dotenv import load_dotenv
 from ingestion.contextualizer import contextualize_chunks
 
 
-PERSIST_DIR="./chroma_db"
-COLLECTION_NAME="rag_engine_pipeline"
 EMBEDDING_MODEL_NAME="BAAI/bge-small-en-v1.5"
 CONTEXTUAL_LLM_MODEL="openai/gpt-oss-120b"
 
@@ -38,9 +36,9 @@ def main():
     embed_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     embeddings = generate_embeddings(chunks, embed_model)
     
-    print("[5/5] Storing in ChromaDB...")
-    total = store_chunks(chunks, embeddings, PERSIST_DIR, COLLECTION_NAME)
-    print(f"Done! Collection now holds {total} records.")
+    print("[5/5] Storing in DB...")
+    total = store_chunks(chunks, embeddings)
+    print(f"Done!")
 
 if __name__ == "__main__":
     main()

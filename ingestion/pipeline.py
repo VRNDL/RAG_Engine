@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 from docling.document_converter import DocumentConverter
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from sentence_transformers import SentenceTransformer
-import chromadb
+from weaviate_client import get_weaviate_client, setup_schema
 
 
 #---Loader---
@@ -64,24 +64,29 @@ def generate_embeddings(chunks: List[Dict[str, Any]], model: SentenceTransformer
 
 #--Storage of chunks--
 
-def store_chunks(chunks: List[Dict[str, Any]], embeddings: List[List[float]], persist_dir: str, collection_name: str):
-    client=chromadb.PersistentClient(path=persist_dir)  # connect to chromadb 
-    collection=client.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"}  # what to search by
-    )
+def store_chunks(chunks: List[Dict[str, Any]], embeddings: List[List[float]]):
+    """Pushes chunks and vectors to weaviate for hybrid search"""
+    client=get_weaviate_client()
+    collection=setup_schema(client)
 
-    # break chunks into separate lists for chromadb
-    ids=[c["id"] for c in chunks]
-    documents=[c["text"] for c in chunks]   
-    metadatas=[c["metadata"] for c in chunks]
+    with collection.batch.dynamic() as batch:
+        for idx, chunk in enumerate(chunks):
+            meta=chunk["metadata"]
+            context_parts=[]
+            for header in ["Header 1", "Header 2", "Header 3"]:
+                if header in meta:
+                    context_parts.append(f"{header}: {meta[header]}")
 
-    # update database
-    collection.upsert(
-        ids=ids,
-        embeddings=embeddings,
-        documents=documents,
-        metadatas=metadatas
-    )
+            document_context=" | ".join(context_parts) if context_parts else "No headers"
 
-    return collection.count()
+            batch.add_object(
+                properties={
+                    "text": chunk["text"],
+                    "document_context": document_context,
+                    "source": meta.get("source","Unknown")
+                },
+                vector=embeddings[idx]
+            )
+
+    print("Successfully built Weaviate Hybrid Indexes!")
+    client.close()
